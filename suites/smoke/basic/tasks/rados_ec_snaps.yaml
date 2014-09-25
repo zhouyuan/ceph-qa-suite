@@ -9,6 +9,7 @@ tasks:
       osd:
         osd debug reject backfill probability: .3
         osd max backfills: 1
+        osd max pg log entries: 100
 - thrashosds:
     chance_pgnum_grow: 3
     chance_pgpnum_fix: 1
