@@ -169,6 +169,18 @@ class CephFSMount(object):
         self.background_procs.append(rproc)
         return rproc
 
+    def write_n_mb(self, filename, n_mb, seek=0):
+        """
+        Write the requested number of megabytes to a file
+        """
+        assert(self.is_mounted())
+
+        self.run_shell(["dd", "if=/dev/urandom", "of={0}".format(filename),
+                        "bs=1M",
+                        "count={0}".format(n_mb),
+                        "seek={0}".format(seek)
+        ])
+
     def open_n_background(self, fs_path, count):
         """
         Open N files for writing, hold them open in a background process

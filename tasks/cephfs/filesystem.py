@@ -42,6 +42,28 @@ class Filesystem(object):
         self.client_id = client_list[0]
         self.client_remote = list(misc.get_clients(ctx=ctx, roles=["client.{0}".format(self.client_id)]))[0][1]
 
+    def _df(self):
+        return json.loads(self.mon_manager.raw_cluster_cmd("df", "--format=json-pretty"))
+
+    def get_data_pool_names(self):
+        fs_list = json.loads(self.mon_manager.raw_cluster_cmd("fs", "ls", "--format=json-pretty"))
+        assert len(fs_list) == 1  # we don't handle multiple filesystems yet
+        return fs_list[0]['data_pools']
+
+    def get_pool_df(self, pool_name):
+        """
+        Return a dict like:
+        {u'bytes_used': 0, u'max_avail': 83848701, u'objects': 0, u'kb_used': 0}
+        """
+        for pool_df in self._df()['pools']:
+            if pool_df['name'] == pool_name:
+                return pool_df['stats']
+
+        raise RuntimeError("Pool name '{0}' not found".format(pool_name))
+
+    def get_usage(self):
+        return self._df()['stats']['total_used_bytes']
+
     def get_mds_hostnames(self):
         result = set()
         for mds_id in self.mds_ids:
