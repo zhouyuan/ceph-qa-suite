@@ -856,18 +856,15 @@ def osd_scrub_pgs(ctx, config):
     vlist = ctx.cluster.remotes.values()
     testdir = teuthology.get_testdir(ctx)
     rem_site = ctx.cluster.remotes.keys()[0]
-    all_clean = False
-    for _ in range(0, retries):
-	stats = get_all_pg_info(rem_site, testdir)
-        states = [stat['state'] for stat in stats]
-        if len(set(states)) == 1 and states[0] == 'active+clean':
-            all_clean = True
-            break
-        log.info("Waiting for all osds to be active and clean.")
-        time.sleep(delays)
-    if not all_clean:
-        log.info("Scrubbing terminated -- not all pgs were active and clean.")
+
+    # wait for pg stats to clear
+    time.sleep(30)
+    try:
+        ctx.manager.wait_for_clean(300)
+    except:
+        log.info("osd_wait_snaps_trimmed not clean")
         return
+
     check_time_now = time.localtime()
     time.sleep(1)
     for slists in vlist:
