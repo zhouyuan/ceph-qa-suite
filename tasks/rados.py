@@ -178,8 +178,8 @@ def task(ctx, config):
                 tests[id_] = proc
             run.wait(tests.itervalues())
 
-            for pool in created_pools:
-                ctx.manager.remove_pool(pool)
+            #for pool in created_pools:
+            #    ctx.manager.remove_pool(pool)
 
     running = gevent.spawn(thread)
 
