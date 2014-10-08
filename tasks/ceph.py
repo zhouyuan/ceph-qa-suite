@@ -841,6 +841,18 @@ def get_all_pg_info(rem_site, testdir):
     all_info = json.loads(info.stdout.getvalue())
     return all_info['pg_stats']
 
+def get_pg_query(pgid, rem_site, testdir):
+    """
+    Get pg query results
+    """
+    res = rem_site.run(
+        args=[
+            'adjust-ulimits',
+            'ceph-coverage',
+            '{tdir}/archive/coverage'.format(tdir=testdir),
+            'ceph', 'pg', pgid, 'query'], stdout=StringIO())
+    return json.loads(res.stdout.getvalue())
+
 def osd_scrub_pgs(ctx, config):
     """
     Scrub pgs when we exit.
@@ -856,18 +868,15 @@ def osd_scrub_pgs(ctx, config):
     vlist = ctx.cluster.remotes.values()
     testdir = teuthology.get_testdir(ctx)
     rem_site = ctx.cluster.remotes.keys()[0]
-    all_clean = False
-    for _ in range(0, retries):
-	stats = get_all_pg_info(rem_site, testdir)
-        states = [stat['state'] for stat in stats]
-        if len(set(states)) == 1 and states[0] == 'active+clean':
-            all_clean = True
-            break
-        log.info("Waiting for all osds to be active and clean.")
-        time.sleep(delays)
-    if not all_clean:
-        log.info("Scrubbing terminated -- not all pgs were active and clean.")
+
+    # wait for pg stats to clear
+    time.sleep(30)
+    try:
+        ctx.manager.wait_for_clean(300)
+    except:
+        log.info("osd_wait_snaps_trimmed not clean")
         return
+
     check_time_now = time.localtime()
     time.sleep(1)
     for slists in vlist:
@@ -904,6 +913,39 @@ def osd_scrub_pgs(ctx, config):
         if loop:
             log.info('Still waiting for all pgs to be scrubbed.')
             time.sleep(delays)
+
+def osd_wait_snaps_trimmed(ctx, config):
+    """
+    When we exit, wait until all snaps are trimmed.
+    """
+    log.info("osd_wait_snaps_trimmed")
+    retries = 12
+    delays = 10
+    testdir = teuthology.get_testdir(ctx)
+    rem_site = ctx.cluster.remotes.keys()[0]
+
+    # wait for pg stats to clear
+    time.sleep(30)
+    try:
+        ctx.manager.wait_for_clean(300)
+    except:
+        log.info("osd_wait_snaps_trimmed not clean")
+        return
+
+    stats = get_all_pg_info(rem_site, testdir)
+    pgs = [i['pgid'] for i in stats]
+    for pg in pgs:
+        log.info("Waiting for pg {pg} to trim".format(pg=pg))
+        done = False
+        for _ in range(retries):
+            query = get_pg_query(pg, rem_site, testdir)
+            if query['snap_trimq'] != "[]":
+                log.info("Still waiting for pg {pg} to trim".format(pg=pg))
+                time.sleep(delays)
+            else:
+                done = True
+                break
+        assert(done)
 
 @contextlib.contextmanager
 def run_daemon(ctx, config, type_):
@@ -1275,3 +1317,4 @@ def task(ctx, config):
         finally:
             if config.get('wait-for-scrub', True):
                 osd_scrub_pgs(ctx, config)
+                osd_wait_snaps_trimmed(ctx, config)
