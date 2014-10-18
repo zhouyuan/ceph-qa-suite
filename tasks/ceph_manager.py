@@ -192,7 +192,7 @@ class Thrasher:
             cmd = (prefix + "--op import --file {file}").format(id=imp_osd, file=exp_path)
             imp_remote.run(args=cmd)
             if proc.exitstatus:
-                raise Exception("ceph_objectstore_tool: import failure with status {ret}".format(ret=proc.exitstatus))
+                self.log("ceph_objectstore_tool: import failure with status {ret}".format(ret=proc.exitstatus))
             cmd = "rm -f {file}".format(file=exp_path)
             exp_remote.run(args=cmd)
             if imp_remote != exp_remote:
