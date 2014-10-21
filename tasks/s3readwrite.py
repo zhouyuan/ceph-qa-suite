@@ -9,6 +9,7 @@ import os
 import random
 import string
 import yaml
+from tempfile import mkstemp
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -97,6 +98,8 @@ def create_users(ctx, config):
         s3tests_conf['readwrite'].setdefault('writers', 3)
         s3tests_conf['readwrite'].setdefault('duration', 300)
         s3tests_conf['readwrite'].setdefault('files', {})
+        s3tests_conf['readwrite'].setdefault('output', mkstemp(prefix='s3readwrite')[1]) 
+        s3tests_conf['readwrite'].setdefault('verbose', False) 
         rwconf = s3tests_conf['readwrite']
         rwconf['files'].setdefault('num', 10)
         rwconf['files'].setdefault('size', 2000)
@@ -215,7 +218,8 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    for client, client_config in config.iteritems():
+    rem_io = {}
+    for client, client_config in config['clients'].iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         conf = teuthology.get_file(remote, '{tdir}/archive/s3readwrite.{client}.config.yaml'.format(tdir=testdir, client=client))
         args = [
@@ -224,12 +228,27 @@ def run_tests(ctx, config):
         if client_config is not None and 'extra_args' in client_config:
             args.extend(client_config['extra_args'])
 
+        lots_of_output = StringIO()
         ctx.cluster.only(client).run(
             args=args,
             stdin=conf,
+            stdout=lots_of_output,
             )
-    yield
-
+        rem_io[client] = lots_of_output
+    try:
+        yield
+    finally:
+        for client in rem_io:
+            out_data = rem_io[client].getvalue()
+            rwinfo = config['s3tests_conf'][client]['readwrite']
+            out_file = rwinfo['output']
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            teuthology.write_file(remote, out_file, out_data)
+            log.info("%s :s3readwrite output saved in %s" % (remote, out_file))
+            if rwinfo['verbose']:
+                lines = out_data.split("\n")
+                for line_ in lines:
+                    log.info(line_)
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -271,6 +290,8 @@ def task(ctx, config):
                 readers: 10
                 writers: 3
                 duration: 600
+                output: /tmp/output
+                verbose: True
                 files:
                   num: 10
                   size: 2000
@@ -292,6 +313,10 @@ def task(ctx, config):
                 access_key: myaccesskey
                 secret_key: mysecretkey
 
+    This test writes results to the file specified in the output line under s3readwrite.
+    If no output is specified, the results are saved in a temporary file.
+    Results are also written to the teuthology.log file if verbose is set to True.
+    (default is False).
     """
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
@@ -340,7 +365,10 @@ def task(ctx, config):
                 clients=config,
                 s3tests_conf=s3tests_conf,
                 )),
-        lambda: run_tests(ctx=ctx, config=config),
+        lambda: run_tests(ctx=ctx, config=dict(
+                clients=config,
+                s3tests_conf=s3tests_conf,
+                )),
         ):
         pass
     yield
