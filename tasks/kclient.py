@@ -69,6 +69,7 @@ def task(ctx, config):
 
         mounts[id_] = kernel_mount
 
+        remote.run(args=["sudo", "bash", "-c", "echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control"])
         kernel_mount.mount()
 
     ctx.mounts = mounts

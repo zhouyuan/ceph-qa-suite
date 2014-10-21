@@ -106,6 +106,20 @@ class CephFSMount(object):
         args = ["cd", self.mountpoint, run.Raw('&&')] + args
         return self.client_remote.run(args=args)
 
+    def open_no_data(self, basename):
+        """
+        A pure metadata operation
+        """
+        assert(self.is_mounted())
+
+        path = os.path.join(self.mountpoint, basename)
+
+        self._run_python(dedent(
+            """
+            f = open("{path}", 'w')
+            """.format(path=path)
+        ))
+
     def open_background(self, basename="background_file"):
         """
         Open a file for writing, then block such that the client
@@ -227,4 +241,7 @@ class CephFSMount(object):
                     pass
 
     def get_global_id(self):
+        raise NotImplementedError()
+
+    def get_osd_epoch(self):
         raise NotImplementedError()

@@ -221,7 +221,6 @@ class TestClientLimits(CephFSTestCase):
         self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
         rproc.wait()
 
-
 @contextlib.contextmanager
 def task(ctx, config):
     fs = Filesystem(ctx, config)

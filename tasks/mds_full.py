@@ -75,6 +75,13 @@ class TestClusterFull(CephFSTestCase):
     mount_b = None
 
     def setUp(self):
+
+        if self.mount_a.is_mounted():
+            self.mount_a.umount_wait()
+
+        if self.mount_b.is_mounted():
+            self.mount_b.umount_wait()
+
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
         if not self.mount_a.is_mounted():
@@ -91,6 +98,49 @@ class TestClusterFull(CephFSTestCase):
         self.fs.clear_firewall()
         self.mount_a.teardown()
         self.mount_b.teardown()
+
+    def test_barrier(self):
+        """
+        That when an OSD epoch barrier is set on an MDS, subsequently
+        issued capabilities cause clients to update their OSD map to that
+        epoch.
+        """
+
+        # Check the initial barrier epoch on the MDS: this should be
+        # set to the latest map at MDS startup
+        # TODO
+
+        initial_client_epoch = self.mount_a.get_osd_epoch()[0]
+        self.assertEqual(initial_client_epoch, self.mount_b.get_osd_epoch()[0])
+
+        # Set and unset a flag to cause OSD epoch to increment
+        self.fs.mon_manager.raw_cluster_cmd("osd", "set", "pause")
+        self.fs.mon_manager.raw_cluster_cmd("osd", "unset", "pause")
+
+        out = self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json").strip()
+        new_epoch = json.loads(out)['epoch']
+        self.assertNotEqual(initial_client_epoch, new_epoch)
+
+        # Do a metadata operation on client A, witness that it ends up with
+        # the old OSD map from startup time (nothing has prompted it
+        # to update its map)
+
+        self.mount_b.open_no_data("alpha")
+        mount_a_epoch, mount_a_barrier = self.mount_a.get_osd_epoch()
+        self.assertEqual(mount_a_epoch, initial_client_epoch)
+        #self.assertEqual(mount_a_barrier, initial_epoch)  # TODO
+
+        # Set a barrier on the MDS
+        self.fs.mds_asok(["osdmap", "barrier", new_epoch.__str__()])
+
+        # Do an operation on client B, witness that it ends up with
+        # the latest OSD map from the barrier
+        self.mount_b.run_shell(["touch", "bravo"])
+        self.mount_b.open_no_data("bravo")
+        mount_b_epoch, mount_b_barrier = self.mount_b.get_osd_epoch()
+
+        self.assertEqual(mount_b_epoch, new_epoch)
+        self.assertEqual(mount_b_barrier, new_epoch)
 
     def _test_full(self, easy_case):
         """
@@ -171,14 +221,15 @@ class TestClusterFull(CephFSTestCase):
             timeout=10)
 
         # Now I should be able to write again
-        self.mount_a.write_n_mb("large_file", 50, seek=fill_mb)
+        self.mount_a.write_n_mb("large_file", 50, seek=0)
 
-    def test_full_easy(self):
+        # Ensure that the MDS keeps its OSD epoch barrier across a restart
+
+    def test_full_different_file(self):
         self._test_full(True)
 
-    def test_full_hard(self):
+    def test_full_same_file(self):
         self._test_full(False)
-
 
 @contextlib.contextmanager
 def task(ctx, config):
