@@ -1,5 +1,4 @@
 machine_type: vps
-interactive-on-error: true
 
 tasks:
 - ssh_keys:
@@ -7,5 +6,3 @@ tasks:
     iceball-location: http://download.inktank.com/enterprise-testing
     ice-version: 1.2.2
     email: calamari@inktank.com
-
-- interactive:
