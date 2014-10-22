@@ -5,6 +5,8 @@ import contextlib
 import logging
 import os
 import re
+import requests
+import shutil
 import subprocess
 import webbrowser
 
@@ -164,9 +166,15 @@ def task(ctx, config):
     Options are:
 
     version -- ceph version we are testing against (defaults to 80.1)
-    ice-tool-dir -- local directory where ice-tool either exists or will
+    ice-version -- version of ICE we're testing (default 1.2.2)
+    ice-tool-dir -- optional local directory where ice-tool exists or will
                     be loaded (defaults to src in home directory)
-    iceball-location -- location of preconfigured iceball (defaults to .)
+    iceball-location -- Can be an HTTP URL, in which case fetch from this
+                        location, using 'ice-version' and distro information
+                        to select the right tarball.  Can also be a local
+                        path.  If local path is '.', and iceball is not
+                        already present, build it in '.' using
+                        ice-tool-dir tools.
     start-browser -- If True, start a browser.  To be used by runs that will
                      bring up a browser quickly for human use.  Set to False
                      for overnight suites that are testing for problems in
@@ -174,9 +182,6 @@ def task(ctx, config):
     email -- email address for the user (defaults to x@y.com)
     calamari_user -- user name to log into gui (defaults to admin)
     calamari_password -- calamari user password (defaults to admin)
-
-    If iceball-location is '.', then we try to build a gz file using the
-    ice-tool-dir commands.
     """
     cal_svr = None
     start_browser = config.get('start-browser', True)
@@ -213,6 +218,24 @@ def adjust_yum_repos(ctx, cal_svr):
                 restore_yum_repos(remote)
 
 
+def get_iceball_with_http(urlbase, ice_version, ice_distro, destdir):
+    '''
+    Copy iceball with http to destdir
+    '''
+    url = '/'.join((
+        urlbase,
+        '{ver}/ICE-{ver}-{distro}.tar.gz'.format(
+            ver=ice_version, distro=ice_distro
+        )
+    ))
+    # stream=True means we don't download until copyfileobj below,
+    # and don't need a temp file
+    r = requests.get(url, stream=True)
+    filename = url.split('/')[-1]
+    with open(filename, 'w') as f:
+        shutil.copyfileobj(r.raw, f)
+
+
 @contextlib.contextmanager
 def calamari_install(config, cal_svr):
     """
@@ -243,8 +266,15 @@ def calamari_install(config, cal_svr):
     if ice_distro in convert:
         ice_distro = convert[ice_distro]
     log.info('calamari server on %s' % ice_distro)
+
+    # get iceball, either by fetching it with http, building it, or
+    # just interpreting the path
     iceball_loc = config.get('iceball-location', '.')
-    if iceball_loc == '.':
+    ice_version = config.get('ice-version', '1.2.2')
+    if iceball_loc.startswith('http'):
+        get_iceball_with_http(iceball_loc, ice_version, ice_distro, '.')
+        iceball_loc = '.'
+    elif iceball_loc == '.':
         ice_tool_loc = os.path.join(ice_tool_dir, 'ice-tools')
         if not os.path.isdir(ice_tool_loc):
             try:
@@ -259,6 +289,7 @@ def calamari_install(config, cal_svr):
             subprocess.check_call([exec_ice, '-b', version, '-o', ice_distro])
         except subprocess.CalledProcessError:
             raise RuntimeError('Unable to create %s distro' % ice_distro)
+
     gz_file = ''
     for file_loc in os.listdir(iceball_loc):
         sfield = '^ICE-.*{0}\.tar\.gz$'.format(ice_distro)
