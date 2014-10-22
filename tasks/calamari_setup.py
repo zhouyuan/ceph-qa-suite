@@ -2,11 +2,12 @@
 Calamari setup task
 """
 import contextlib
-import re
-import os
-import subprocess
 import logging
+import os
+import re
+import subprocess
 import webbrowser
+
 from cStringIO import StringIO
 from teuthology.orchestra import run
 from teuthology import contextutil
