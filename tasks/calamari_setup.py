@@ -234,7 +234,7 @@ def get_iceball_with_http(urlbase, ice_version, ice_distro, destdir):
     filename = url.split('/')[-1]
     with open(filename, 'w') as f:
         shutil.copyfileobj(r.raw, f)
-
+    log.info('saved %s as %s' % url, filename)
 
 @contextlib.contextmanager
 def calamari_install(config, cal_svr):
