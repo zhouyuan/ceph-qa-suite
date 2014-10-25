@@ -1057,6 +1057,7 @@ class CephManager:
         Scrub pg and wait for scrubbing to finish
         """
         init = self.get_last_scrub_stamp(pool, pgnum)
+        self.log("stamp {time}".format(time=init))
         self.raw_cluster_cmd('pg', stype, self.get_pgid(pool, pgnum))
         while init == self.get_last_scrub_stamp(pool, pgnum):
             self.log("waiting for scrub type %s"%(stype,))
