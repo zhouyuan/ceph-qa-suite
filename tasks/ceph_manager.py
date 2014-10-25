@@ -1059,9 +1059,18 @@ class CephManager:
         init = self.get_last_scrub_stamp(pool, pgnum)
         self.log("stamp {time}".format(time=init))
         self.raw_cluster_cmd('pg', stype, self.get_pgid(pool, pgnum))
-        while init == self.get_last_scrub_stamp(pool, pgnum):
+        check == self.get_last_scrub_stamp(pool, pgnum):
+        pgstr = self.get_pgid(pool, pgnum)
+        stats = self.get_single_pg_stats(pgstr)
+        self.log("start stats {stats}".format(stats=stats))
+        while init == check
             self.log("waiting for scrub type %s"%(stype,))
             time.sleep(10)
+            check == self.get_last_scrub_stamp(pool, pgnum):
+        pgstr = self.get_pgid(pool, pgnum)
+        stats = self.get_single_pg_stats(pgstr)
+        self.log("final stats {stats}".format(stats=stats))
+        self.log("final stamp {time}".format(time=check))
 
     def get_single_pg_stats(self, pgid):
         """
