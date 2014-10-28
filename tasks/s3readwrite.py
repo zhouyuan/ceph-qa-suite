@@ -218,37 +218,27 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    rem_io = {}
     for client, client_config in config['clients'].iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         conf = teuthology.get_file(remote, '{tdir}/archive/s3readwrite.{client}.config.yaml'.format(tdir=testdir, client=client))
-        args = [
-                '{tdir}/s3-tests/virtualenv/bin/s3tests-test-readwrite'.format(tdir=testdir),
-                ]
+        rw_tester = ['{tdir}/s3-tests/virtualenv/bin/s3tests-test-readwrite'.format(
+                    tdir=testdir)]
         if client_config is not None and 'extra_args' in client_config:
-            args.extend(client_config['extra_args'])
-
-        lots_of_output = StringIO()
-        ctx.cluster.only(client).run(
-            args=args,
-            stdin=conf,
-            stdout=lots_of_output,
-            )
-        rem_io[client] = lots_of_output
+            rw_tester.extend(client_config['extra_args'])
+        output_file = config['clients']['client.0']['readwrite']['output']
+        args = ['echo', conf, run.Raw('|')]
+        args.extend(rw_tester)
+        args.extend([run.Raw('>'), output_file])
+        ctx.cluster.only(client).run(args=args)
     try:
         yield
     finally:
-        for client in rem_io:
-            out_data = rem_io[client].getvalue()
+        for client in config['clients']:
             rwinfo = config['s3tests_conf'][client]['readwrite']
-            out_file = rwinfo['output']
-            (remote,) = ctx.cluster.only(client).remotes.keys()
-            teuthology.write_file(remote, out_file, out_data)
-            log.info("%s :s3readwrite output saved in %s" % (remote, out_file))
+            ofile = config['clients'][client]['readwrite']['output']
+            log.info('s3readwrite output in: %s', ofile)
             if rwinfo['verbose']:
-                lines = out_data.split("\n")
-                for line_ in lines:
-                    log.info(line_)
+                ctx.cluster.only(client).run(args=['cat', ofile])
 
 @contextlib.contextmanager
 def task(ctx, config):
